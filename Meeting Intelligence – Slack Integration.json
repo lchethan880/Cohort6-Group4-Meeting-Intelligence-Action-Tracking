@@ -1,0 +1,189 @@
+{
+  "name": "Meeting Intelligence – Slack Integration",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "getAll",
+        "returnAll": true,
+        "options": {
+          "jql": "project = KAN AND statusCategory != Done ORDER BY created DESC"
+        }
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        -1152,
+        -1728
+      ],
+      "id": "e547c182-23d3-4a6c-988d-9175d0e28557",
+      "name": "Jira - Get Open Issues",
+      "retryOnFail": false,
+      "maxTries": 2,
+      "alwaysOutputData": true,
+      "notesInFlow": true,
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "zxuwdJHoC1OdPKVq",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const today = new Date(); today.setHours(0, 0, 0, 0);\nconst ymd = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');\nconst MONTHS = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };\nconst text = d => !d ? '' : (typeof d === 'string' ? d : JSON.stringify(d));\nfunction parseDue(f) {\n  if (f.duedate) return new Date(f.duedate + 'T00:00:00');\n  const t = text(f.description);\n  const iso = t.match(/deadline[^0-9]*(\\d{4}-\\d{2}-\\d{2})/i) || t.match(/(\\d{4}-\\d{2}-\\d{2})/);\n  if (iso) return new Date(iso[1] + 'T00:00:00');\n  const md = t.match(/deadline[^a-z0-9]*([a-z]{3})[a-z]*\\.?\\s+(\\d{1,2})(?:,?\\s*(\\d{4}))?/i);\n  if (md && MONTHS[md[1].toLowerCase()] !== undefined) return new Date(Number(md[3] || today.getFullYear()), MONTHS[md[1].toLowerCase()], Number(md[2]));\n  return null;   // \"No deadline\" or vague → never reported as overdue\n}\nfunction assigneeOf(f) {\n  if (f.assignee && f.assignee.displayName) return f.assignee.displayName;\n  const m = (f.summary || '').match(/\\(([^()]+)\\)\\s*$/);\n  return m ? m[1].trim() : 'Unassigned';\n}\nconst overdue = [];\nfor (const it of $input.all()) {\n  const i = it.json, f = i.fields || {};\n  const due = parseDue(f);\n  if (!due || isNaN(due) || due >= today) continue;\n  overdue.push({ key: i.key, summary: f.summary, assignee: assigneeOf(f), due: ymd(due), days: Math.round((today - due) / 864e5) });\n}\nif (!overdue.length) return [{ json: { count: 0, text: '' } }];\nconst byPerson = {};\noverdue.forEach(o => (byPerson[o.assignee] = byPerson[o.assignee] || []).push(o));\nlet msg = `⏰ *Weekly overdue actions* (${overdue.length})\\n`;\nfor (const [p, items] of Object.entries(byPerson)) {\n  msg += `\\n*${p}*\\n` + items.map(o => `• ${o.summary} — due ${o.due} (${o.days}d overdue) · ${o.key}`).join('\\n') + '\\n';\n}\nreturn [{ json: { count: overdue.length, text: msg } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -928,
+        -1728
+      ],
+      "id": "f219955b-883c-43ee-9bb2-412d60bdecc5",
+      "name": "Find Overdue (Team)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "e07354b1-5692-4efe-bb8c-84800757fc82",
+              "leftValue": "={{ $json.count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -736,
+        -1728
+      ],
+      "id": "3c08d650-4a9d-4f09-a0ed-dd49a8476a4a",
+      "name": "Any Overdue?"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0C7AUGJN4Q",
+          "mode": "list",
+          "cachedResultName": "all-cohort6-group4"
+        },
+        "text": "={{ $json.text }}",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        -464,
+        -1744
+      ],
+      "id": "045b172a-c250-47a9-9704-837232e1f275",
+      "name": "Post to Team Channel",
+      "webhookId": "b4b02ebd-8f6c-4b36-8930-3fab47d45b8f",
+      "credentials": {
+        "slackApi": {
+          "id": "c03Mtng14WAelLy4",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -1392,
+        -1728
+      ],
+      "id": "7af09058-c29b-4ea2-8da8-38a519ae980a",
+      "name": "Schedule Trigger - 9AM Daily"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Jira - Get Open Issues": {
+      "main": [
+        [
+          {
+            "node": "Find Overdue (Team)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Overdue (Team)": {
+      "main": [
+        [
+          {
+            "node": "Any Overdue?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Overdue?": {
+      "main": [
+        [
+          {
+            "node": "Post to Team Channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger - 9AM Daily": {
+      "main": [
+        [
+          {
+            "node": "Jira - Get Open Issues",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "5ec4378b-adbb-4a46-b527-fba171c186c9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "65c717d8055f4e454b9d24138f62e838f503efce5beb72dbca975e13a8ac5511"
+  },
+  "nodeGroups": [],
+  "id": "JbYfGIl66ZTXqyaN",
+  "tags": []
+}
