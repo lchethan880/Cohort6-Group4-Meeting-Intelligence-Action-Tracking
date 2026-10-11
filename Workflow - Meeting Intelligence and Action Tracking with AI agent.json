@@ -1,0 +1,1564 @@
+{
+  "name": "Meeting Intelligence & Action Tracking with AI agent -2",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Meeting Intelligence Intake",
+        "formDescription": "Upload a meeting recording (audio) OR a transcript payload (.json) to summarize and extract action items.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Meeting Title",
+              "fieldName": "meeting_title",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Participant Emails (comma separated)",
+              "fieldName": "participant_emails",
+              "placeholder": "alice@acme.com, bob@acme.com",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Meeting Recording (audio) or Transcript (.json)",
+              "fieldType": "file",
+              "fieldName": "audio",
+              "multipleFiles": false,
+              "acceptFileTypes": ".mp3,.m4a,.wav,.mp4,.webm,.json",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "path": "meeting-intake"
+        }
+      },
+      "id": "e2aba923-2e11-45a7-be7b-3ab3c536276b",
+      "name": "Meeting Intake Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        -5488,
+        304
+      ],
+      "webhookId": "22c0fe12-d7b0-4244-8fe7-bfd6efef8e26"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "is-json",
+              "leftValue": "={{ $binary.audio.fileExtension }}",
+              "rightValue": "json",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "04071c99-4800-47c3-9523-d723b1cea47a",
+      "name": "Is JSON Input?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -5232,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "fromJson",
+        "binaryPropertyName": "audio",
+        "destinationKey": "parsed",
+        "options": {}
+      },
+      "id": "7b957969-a65a-447f-9732-cbd2770ec476",
+      "name": "Parse JSON File",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -4016,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $json.parsed || {};\nlet text = \"\";\nif (typeof p === \"string\") { text = p; }\nelse if (typeof p.transcript_text === \"string\" && p.transcript_text) { text = p.transcript_text; }\nelse if (Array.isArray(p.utterances) && p.utterances.length) { text = p.utterances.map(function (u) { return \"Speaker \" + (u.speaker || \"\") + \": \" + (u.text || \"\"); }).join(\"\\n\"); }\nelse if (typeof p.transcript === \"string\" && p.transcript) { text = p.transcript; }\nelse if (typeof p.text === \"string\" && p.text) { text = p.text; }\nif (!text) { text = JSON.stringify(p, null, 2); }\nreturn [{ json: { transcript_text: text } }];"
+      },
+      "id": "88b55178-051a-4930-bfdf-b985ec53bf12",
+      "name": "Build Transcript From JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3792,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=Extract meeting intelligence from the following transcript.\n\nTRANSCRIPT:\n{{ $json.transcript_text }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "instructions": "You are a meeting intelligence analyst. Return ONLY a JSON object with these keys: \"summary\" (object: {\"key_topics\": string[], \"overview\": string}), \"decisions\" (array of {\"decision\": string, \"rationale\": string}), \"action_items\" (array of {\"title\": string, \"assignee\": string, \"deadline\": string, \"priority\": \"High\"|\"Medium\"|\"Low\", \"details\": string, \"status\": \"New\"|\"In Progress\"|\"Completed\", \"progress_note\": string}), \"risks\" (array of {\"risk\": string, \"impact\": string}), \"follow_up_meeting\" (object: {\"needed\": boolean, \"suggested_topic\": string, \"suggested_timeframe\": string}), \"parking_lot\" (array of strings). For each action item, set \"status\" to \"Completed\" if the transcript says it was done/finished/delivered/completed, \"In Progress\" if it is currently being worked on or partially done, otherwise \"New\"; put any spoken detail about that progress or completion into \"progress_note\" (empty string if none). IMPORTANT: \"action_items\" must contain one entry for EVERY task, work item or deliverable that any participant reports on or is asked about, including tasks that are already Completed or In Progress. A status update such as \"X is complete\" or \"over to you, NAME\" followed by a report is an action item owned by that person with status Completed. Never return an empty action_items array when people report on their work. Use empty arrays/strings only for other keys when nothing applies. Never invent assignees or deadlines that are not stated; use \"Unassigned\" or \"No deadline\" instead.",
+          "maxTokens": 4000,
+          "textFormat": {
+            "textOptions": {
+              "type": "json_object"
+            }
+          }
+        }
+      },
+      "id": "71cb875f-0a21-4984-a53a-fb5bcb4c7816",
+      "name": "Extract Meeting Intelligence",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        -1856,
+        432
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "TbbxlugiReUs6ryd",
+          "name": "OpenAI account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let data = ($json.output && $json.output[0] && $json.output[0].content && $json.output[0].content[0])\n  ? $json.output[0].content[0].text\n  : $json;\nif (typeof data === \"string\") { try { data = JSON.parse(data); } catch (e) { data = {}; } }\ndata = data || {};\nconst form = $(\"Meeting Intake Form\").item.json;\nconst title = form.meeting_title || \"Meeting\";\nconst emails = form.participant_emails || \"\";\nconst summary = data.summary || {};\nconst decisions = Array.isArray(data.decisions) ? data.decisions : [];\nconst risks = Array.isArray(data.risks) ? data.risks : [];\nconst parking = Array.isArray(data.parking_lot) ? data.parking_lot : [];\nconst follow = data.follow_up_meeting || {};\nconst rawActions = Array.isArray(data.action_items) ? data.action_items : [];\nconst actions = rawActions.map(function (a) {\n  const t = a.title || \"Action item\";\n  const asg = a.assignee || \"Unassigned\";\n  const dl = a.deadline || \"No deadline\";\n  const pr = a.priority || \"Medium\";\n  const det = a.details || \"\";\n  const st = a.status || \"New\";\n  const pn = a.progress_note || \"\";\n  const hu = /progress|complet/i.test(st);\n  const desc = \"Action: \" + t + \"\\nAssignee: \" + asg + \"\\nDeadline: \" + dl + \"\\nPriority: \" + pr + \"\\n\\n\" + det + \"\\n\\nMeeting: \" + title;\n  return { title: t, assignee: asg, deadline: dl, priority: pr, details: det, status: st, progress_note: pn, has_update: hu, meeting_title: title, jira_summary: \"[\" + pr + \"] \" + t + \" (\" + asg + \")\", jira_description: desc };\n});\nconst esc = function (s) { return String(s == null ? \"\" : s).replace(/&/g, \"&amp;\").replace(/</g, \"&lt;\").replace(/>/g, \"&gt;\"); };\nconst parts = [];\nparts.push(\"<h2>Meeting Summary: \" + esc(title) + \"</h2>\");\nparts.push(\"<p>\" + esc(summary.overview || \"\") + \"</p>\");\nif (Array.isArray(summary.key_topics) && summary.key_topics.length) {\n  parts.push(\"<p><b>Key topics:</b> \" + summary.key_topics.map(esc).join(\", \") + \"</p>\");\n}\nconst email_top = parts.join(\"\\n\");\nparts.push(\"<h3>Action Items</h3>\");\nconst ai_index = parts.length;\nif (actions.length) {\n  parts.push(\"<ul>\" + actions.map(function (a) { return \"<li><b>\" + esc(a.title) + \"</b> - \" + esc(a.assignee) + \" | due \" + esc(a.deadline) + \" | \" + esc(a.priority) + \"</li>\"; }).join(\"\") + \"</ul>\");\n} else { parts.push(\"<p>None.</p>\"); }\nparts.push(\"<h3>Decisions</h3>\");\nif (decisions.length) {\n  parts.push(\"<ul>\" + decisions.map(function (d) { return \"<li>\" + esc(d.decision) + (d.rationale ? \" - \" + esc(d.rationale) : \"\") + \"</li>\"; }).join(\"\") + \"</ul>\");\n} else { parts.push(\"<p>None.</p>\"); }\nparts.push(\"<h3>Risks &amp; Blockers</h3>\");\nif (risks.length) {\n  parts.push(\"<ul>\" + risks.map(function (r) { return \"<li>\" + esc(r.risk) + (r.impact ? \" - \" + esc(r.impact) : \"\") + \"</li>\"; }).join(\"\") + \"</ul>\");\n} else { parts.push(\"<p>None.</p>\"); }\nif (follow && follow.needed) {\n  parts.push(\"<h3>Follow-up Meeting</h3><p>\" + esc(follow.suggested_topic || \"\") + \" (\" + esc(follow.suggested_timeframe || \"\") + \")</p>\");\n}\nif (parking.length) {\n  parts.push(\"<h3>Parking Lot</h3><ul>\" + parking.map(function (p) { return \"<li>\" + esc(p) + \"</li>\"; }).join(\"\") + \"</ul>\");\n}\nconst email_html = parts.join(\"\\n\");\nconst email_bottom = parts.slice(ai_index + 1).join(\"\\n\");\nreturn { json: { meeting_title: title, participant_emails: emails, summary: summary, decisions: decisions, risks: risks, follow_up_meeting: follow, parking_lot: parking, action_items: actions, email_html: email_html, email_top: email_top, email_bottom: email_bottom, structured_json: data } };"
+      },
+      "id": "a029a627-3bc3-4e3b-91b2-24aac001ca26",
+      "name": "Assemble Structured Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1552,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Today is {{ $now.setZone('Asia/Calcutta').toFormat('yyyy-LL-dd (cccc)') }}.\n\nMeeting title: {{ $json.meeting_title }}\nParticipant emails: {{ $json.participant_emails }}\n\nSTRUCTURED MEETING OUTPUT (JSON):\n{{ JSON.stringify({ summary: $json.summary, decisions: $json.decisions, action_items: $json.action_items, risks: $json.risks, follow_up_meeting: $json.follow_up_meeting, parking_lot: $json.parking_lot }) }}",
+        "needsFallback": true,
+        "options": {
+          "systemMessage": "You are the Super Agent, the central orchestrator for meeting follow-up. You do not call Jira, Calendar, Gmail or Docs directly; you delegate to specialist child agents:\n- jira_agent: task lifecycle (create, update, assign/reassign, change status). Send it every action item with title, assignee, deadline, priority, details, status, progress_note and the meeting title.\n- calendar_agent: scheduling (create, update, delete events). Send it the action items that have deadlines (with status), the follow_up_meeting object, participant emails and today's date.\n- gmail_docs_agent: email summary + Google Docs archive. Send it the summary, decisions, risks, parking lot, action items, plus the results returned by jira_agent (including each item's FINAL Jira assignee; items with no resolvable assignee are reassigned to the ticket Reporter) and calendar_agent.\n\nCoordination rules:\n1. Call jira_agent first (skip if there are no action items).\n2. Then call calendar_agent (skip if there are no real deadlines and no follow-up is needed).\n3. Always call gmail_docs_agent last so the email and doc include the Jira keys and calendar events.\nError handling and fallback: if a child agent reports an error or fails, call it once more with the failed items only. If it fails again, continue with the remaining agents and record the failure; gmail_docs_agent must still run and its notes must mention anything that could not be completed. Never invent data that is not in the structured output.\nFinish with a concise JSON-like report: { jira: ..., calendar: ..., email_and_doc: ..., errors: [...] }.",
+          "maxIterations": 15
+        }
+      },
+      "id": "62006563-88ff-422a-baa9-ea62767f91b5",
+      "name": "Super Agent (Orchestrator)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -1120,
+        656
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5",
+          "cachedResultName": "gpt-5"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "faa0303f-4bc6-4fa6-b4fe-e25a2782dbac",
+      "name": "Agent Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -1312,
+        880
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "TbbxlugiReUs6ryd",
+          "name": "OpenAI account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "eebe52e9-657d-4006-bd7f-adc5478e4fbe",
+      "name": "Fallback Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -1184,
+        880
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "TbbxlugiReUs6ryd",
+          "name": "OpenAI account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Jira specialist. Send it the list of action items (title, assignee, deadline, priority, details, status, progress_note, meeting title). It creates, updates, assigns/reassigns and changes the status of Jira tasks and returns the issue keys and what it did.",
+        "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('instructions', 'Action items as JSON plus what to do with them') }}",
+        "options": {
+          "systemMessage": "=Today's date is {{ $now.toFormat('yyyy-MM-dd') }}. Meeting (discussion) date: {{ ($('Meeting Intake Form').first().json.submittedAt || $now.toISO()).slice(0, 10) }}. You are the Jira Agent for project KAN / Cross-Team Projects. Tools: search_issues, create_issue, update_issue, get_issue, find_jira_user, assign_issue, get_transitions, change_status, add_comment.\nFor EVERY action item:\n1. Look for an existing open issue with search_issues (match on the title). Update it if found, otherwise create_issue.\n2. Resolve the assignee: if the assignee is not \"Unassigned\" or empty, call find_jira_user with the assignee name (try the full name first, then the first name only, then the email if one is given). Only consider users with accountType \"atlassian\" and active true. Pick the user whose displayName or email best matches the name (case-insensitive). Cache results so each distinct name is looked up only once.\n3. If a match is found, call assign_issue with the issue key and that user's accountId. Never invent an accountId.\n3b. REPORTER FALLBACK: if the assignee is \"Unassigned\"/empty (i.e. the Jira description field says \"Assignee: Unassigned\"), OR no match / an ambiguous match was found, call get_issue with the issue key, take fields.reporter.accountId and fields.reporter.displayName, and call assign_issue with the reporter's accountId. Then call update_issue to change the description line \"Assignee: Unassigned\" (or the unmatched name) to \"Assignee: <reporter displayName> (Reporter)\" keeping the rest of the description unchanged (also pass the same summary, due_date, start_date and priority_id). Then add_comment: \"Assigned to reporter <displayName> because the action item had no resolvable assignee (original: <name or Unassigned>).\" If get_issue returns no reporter, leave it unassigned and comment.\n4. If status is \"In Progress\" or \"Completed\", call get_transitions then change_status with the matching transition id, and add_comment with the progress_note if present.\nIf a tool fails, retry once, then continue with the next item. Finish with a report listing per item: issue key, title, created/updated, original assignee from the meeting, FINAL Jira assignee display name (mark \"(Reporter)\" when reassigned to the reporter), resolved accountId (or \"not found\"), due date, priority, and status.\nSTART DATE: on every create_issue and update_issue call, set start_date (YYYY-MM-DD). If the discussion states when work on the item starts (e.g. \"start Monday\", \"from Sep 25\"), use that date resolved against the meeting date; otherwise use the meeting (discussion) date. Include the start date in your final report per item.\nPRIORITY: on every create_issue and update_issue call, set priority_id from the action item's priority as stated in the transcript: High = \"2\", Medium = \"3\", Low = \"4\" (default Medium = \"3\" if missing). Include the priority in your final report per item.\nDUE DATE: on every create_issue and update_issue call, set due_date from the action item's deadline converted to YYYY-MM-DD (resolve relative dates like \"next Friday\" or \"end of month\" against today's date). If the deadline is \"No deadline\", empty or too vague to map to a date, pass an empty string.",
+          "maxIterations": 40
+        }
+      },
+      "id": "61117598-f1a7-44b4-89e5-48d006c2aede",
+      "name": "jira_agent",
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 3,
+      "position": [
+        -608,
+        1360
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5",
+          "cachedResultName": "gpt-5"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "186da68e-8452-4a3f-8ab0-f3e551a0b538",
+      "name": "Jira Agent Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -1136,
+        1568
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "TbbxlugiReUs6ryd",
+          "name": "OpenAI account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "limit": 5,
+        "options": {
+          "jql": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('jql', 'JQL query, e.g. project = 10001 AND summary ~ \"keyword\" ORDER BY created DESC') }}"
+        }
+      },
+      "id": "45549b9c-caf1-4d9b-ba5c-9817b3e45de2",
+      "name": "search_issues",
+      "type": "n8n-nodes-base.jiraTool",
+      "typeVersion": 1,
+      "position": [
+        -976,
+        1568
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "2bojPTENh5g9TMI2",
+          "name": "Jira SW Cloud account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "project": {
+          "__rl": true,
+          "value": "10001",
+          "mode": "list",
+          "cachedResultName": "Cross-Team Projects"
+        },
+        "issueType": {
+          "__rl": true,
+          "value": "10009",
+          "mode": "list",
+          "cachedResultName": "Task"
+        },
+        "summary": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('summary', 'Issue summary, e.g. [High] Prepare Q3 budget (Alice)') }}",
+        "additionalFields": {
+          "description": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('description', 'Full issue description with assignee name, deadline, priority, details and meeting title') }}",
+          "customFieldsUi": {
+            "customFieldsValues": [
+              {
+                "fieldId": {
+                  "__rl": true,
+                  "mode": "id",
+                  "value": "duedate"
+                },
+                "fieldValue": "={{ $fromAI('due_date', 'Due date in YYYY-MM-DD format derived from the action item deadline, or an empty string if there is no real deadline', 'string') || null }}"
+              },
+              {
+                "fieldId": {
+                  "__rl": true,
+                  "mode": "id",
+                  "value": "customfield_10015"
+                },
+                "fieldValue": "={{ $fromAI('start_date', 'Start date in YYYY-MM-DD: the date the work was discussed/agreed to start, or the meeting date if no other start is stated', 'string') || null }}"
+              }
+            ]
+          },
+          "priority": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $fromAI('priority_id', 'Jira priority id from the action item priority: High = 2, Medium = 3, Low = 4', 'string') }}"
+          }
+        }
+      },
+      "id": "f45e6d8b-8ae1-4eb1-a10c-154eaed4e74f",
+      "name": "create_issue",
+      "type": "n8n-nodes-base.jiraTool",
+      "typeVersion": 1,
+      "position": [
+        -848,
+        1568
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "2bojPTENh5g9TMI2",
+          "name": "Jira SW Cloud account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "issueKey": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('issue_key', 'Jira issue key, e.g. CTP-12') }}",
+        "updateFields": {
+          "description": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('description', 'New full description (repeat the current one if unchanged)') }}",
+          "customFieldsUi": {
+            "customFieldsValues": [
+              {
+                "fieldId": {
+                  "__rl": true,
+                  "mode": "id",
+                  "value": "duedate"
+                },
+                "fieldValue": "={{ $fromAI('due_date', 'Due date in YYYY-MM-DD format derived from the action item deadline, or an empty string if there is no real deadline', 'string') || null }}"
+              },
+              {
+                "fieldId": {
+                  "__rl": true,
+                  "mode": "id",
+                  "value": "customfield_10015"
+                },
+                "fieldValue": "={{ $fromAI('start_date', 'Start date in YYYY-MM-DD: the date the work was discussed/agreed to start, or the meeting date if no other start is stated', 'string') || null }}"
+              }
+            ]
+          },
+          "priority": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $fromAI('priority_id', 'Jira priority id from the action item priority: High = 2, Medium = 3, Low = 4', 'string') }}"
+          },
+          "summary": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('summary', 'New summary (repeat the current one if unchanged)') }}"
+        }
+      },
+      "id": "ad75a2a5-5d90-4f5b-9837-729b8da13496",
+      "name": "update_issue",
+      "type": "n8n-nodes-base.jiraTool",
+      "typeVersion": 1,
+      "position": [
+        -720,
+        1568
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "2bojPTENh5g9TMI2",
+          "name": "Jira SW Cloud account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "issueKey": "={{ $fromAI('issue_key', 'Jira issue key, e.g. KAN-12', 'string') }}",
+        "additionalFields": {
+          "fields": "summary,description,reporter,assignee"
+        }
+      },
+      "id": "a0fd490f-2a60-47a8-9d5d-e67a829e3a3a",
+      "name": "get_issue",
+      "type": "n8n-nodes-base.jiraTool",
+      "typeVersion": 1,
+      "position": [
+        -1392,
+        1552
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "2bojPTENh5g9TMI2",
+          "name": "Jira SW Cloud account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Search Jira users by name or email. Returns matching users with accountId, displayName, emailAddress, accountType and active. Use it to turn an assignee name into a Jira accountId.",
+        "url": "https://cohort6group4.atlassian.net/rest/api/3/user/search",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "jiraSoftwareCloudApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $fromAI('name', 'Assignee name or email to search for, e.g. Alice or alice@acme.com', 'string') }}"
+            },
+            {
+              "name": "maxResults",
+              "value": "10"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "626cc850-0df6-453b-92d9-e5f2b5c69af2",
+      "name": "find_jira_user",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -1264,
+        1568
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "2bojPTENh5g9TMI2",
+          "name": "Jira SW Cloud account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "issueKey": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('issue_key', 'Jira issue key, e.g. CTP-12') }}",
+        "updateFields": {
+          "assignee": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('assignee_account_id', 'Jira accountId of the assignee, exactly as returned by find_jira_user or the reporter.accountId returned by get_issue') }}"
+          }
+        }
+      },
+      "id": "d76aee5d-aad0-40d9-9cd7-38828eb8dee0",
+      "name": "assign_issue",
+      "type": "n8n-nodes-base.jiraTool",
+      "typeVersion": 1,
+      "position": [
+        -608,
+        1584
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "2bojPTENh5g9TMI2",
+          "name": "Jira SW Cloud account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "transitions",
+        "issueKey": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('issue_key', 'Jira issue key, e.g. CTP-12') }}",
+        "additionalFields": {}
+      },
+      "id": "8132ab8c-bd21-4cbe-aa9b-7a39a1dc9127",
+      "name": "get_transitions",
+      "type": "n8n-nodes-base.jiraTool",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        1584
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "2bojPTENh5g9TMI2",
+          "name": "Jira SW Cloud account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "issueKey": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('issue_key', 'Jira issue key, e.g. CTP-12') }}",
+        "updateFields": {
+          "statusId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('transition_id', 'Transition id returned by get_transitions') }}"
+          }
+        }
+      },
+      "id": "535a4ebc-6ae9-43e9-b70b-434a771df43a",
+      "name": "change_status",
+      "type": "n8n-nodes-base.jiraTool",
+      "typeVersion": 1,
+      "position": [
+        -352,
+        1584
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "2bojPTENh5g9TMI2",
+          "name": "Jira SW Cloud account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "issueComment",
+        "issueKey": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('issue_key', 'Jira issue key, e.g. CTP-12') }}",
+        "comment": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('comment', 'Progress note from the meeting') }}",
+        "options": {}
+      },
+      "id": "461cfc91-2659-4ec1-82f8-d9a413e537b7",
+      "name": "add_comment",
+      "type": "n8n-nodes-base.jiraTool",
+      "typeVersion": 1,
+      "position": [
+        -224,
+        1584
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "2bojPTENh5g9TMI2",
+          "name": "Jira SW Cloud account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Calendar specialist. Send it action-item deadlines, the follow-up meeting info, participant emails and today's date. It creates, updates or deletes Google Calendar events and returns what it did.",
+        "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('instructions', 'Deadlines, follow-up meeting details, participant emails and what to schedule') }}",
+        "options": {
+          "systemMessage": "You are the Calendar Agent. Tools: find_events, create_reminder, create_meeting, update_event, delete_event. Timezone: Asia/Calcutta.\n- Use create_reminder (no attendees) for deadline reminders. Use create_meeting ONLY for the follow-up meeting, and only when at least one valid participant email is available; if there are none, use create_reminder for the follow-up instead.\n- For each action item with a real deadline (not \"No deadline\" / not vague), create_reminder a 30-minute event \"Deadline: <title> (<assignee>)\" at 09:00 on the deadline date. Before creating, call find_events around that date; if an event with the same title exists, update_event instead of creating a duplicate.\n- If an action item is \"Completed\" and a matching deadline event exists in the future, delete_event it.\n- If a follow-up meeting is needed, create a 30-minute event \"Follow-up: <meeting title>\" with all participant emails as attendees at 10:00, at the suggested timeframe (default: 7 days from today).\n- Never create events in the past. Resolve relative dates against the date you are given.\nIf a tool fails, retry once, then report the error and continue. Finish with a short report listing each event id and action.",
+          "maxIterations": 25
+        }
+      },
+      "id": "1fe5de1f-5bdb-4169-8879-8424e3e6968b",
+      "name": "calendar_agent",
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 3,
+      "position": [
+        -208,
+        912
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5",
+          "cachedResultName": "gpt-5"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "e5766819-2a9f-4eb3-846c-bc661d946f53",
+      "name": "Calendar Agent Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -448,
+        1136
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "TbbxlugiReUs6ryd",
+          "name": "OpenAI account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "chaitaliprabhu002@gmail.com",
+          "mode": "list",
+          "cachedResultName": "chaitaliprabhu002@gmail.com"
+        },
+        "limit": 20,
+        "timeMin": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('time_min', 'ISO start of search window') }}",
+        "timeMax": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('time_max', 'ISO end of search window') }}",
+        "options": {
+          "query": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('query', 'Free text to match in event titles') }}"
+        }
+      },
+      "id": "bdbf81c6-2f9f-4ec5-a065-55b7f13c81f1",
+      "name": "find_events",
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        -288,
+        1136
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "bXYFtEd3YxfARXLE",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "chaitaliprabhu002@gmail.com",
+          "mode": "list",
+          "cachedResultName": "chaitaliprabhu002@gmail.com"
+        },
+        "start": "={{ $fromAI('start', 'Reminder start, ISO 8601 with timezone', 'string') }}",
+        "end": "={{ $fromAI('end', 'Reminder end, ISO 8601 with timezone', 'string') }}",
+        "additionalFields": {
+          "description": "={{ $fromAI('description', 'Reminder description', 'string') }}",
+          "summary": "={{ $fromAI('summary', 'Reminder title', 'string') }}"
+        }
+      },
+      "id": "15e1cc30-1a29-4e49-861a-4e6c485c5616",
+      "name": "create_reminder",
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        304,
+        1104
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "bXYFtEd3YxfARXLE",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "chaitaliprabhu002@gmail.com",
+          "mode": "list",
+          "cachedResultName": "chaitaliprabhu002@gmail.com"
+        },
+        "start": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('start', 'Event start, ISO 8601 with timezone') }}",
+        "end": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('end', 'Event end, ISO 8601 with timezone') }}",
+        "additionalFields": {
+          "attendees": [
+            "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('attendees', 'Comma-separated attendee emails (at least one valid email required)') }}"
+          ],
+          "description": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('description', 'Event description') }}",
+          "sendUpdates": "all",
+          "summary": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('summary', 'Event title') }}"
+        }
+      },
+      "id": "3629ec62-55f7-4556-84a7-95ddaeeb6489",
+      "name": "create_meeting",
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        -144,
+        1120
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "bXYFtEd3YxfARXLE",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "calendar": {
+          "__rl": true,
+          "value": "chaitaliprabhu002@gmail.com",
+          "mode": "list",
+          "cachedResultName": "chaitaliprabhu002@gmail.com"
+        },
+        "eventId": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('event_id', 'Id of the event to update') }}",
+        "updateFields": {
+          "description": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('description', 'Event description') }}",
+          "end": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('end', 'New end, ISO 8601') }}",
+          "start": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('start', 'New start, ISO 8601') }}",
+          "summary": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('summary', 'Event title') }}"
+        }
+      },
+      "id": "c3ed9c7c-b9fd-4e0c-b676-8fdebb8a1d76",
+      "name": "update_event",
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        1120
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "bXYFtEd3YxfARXLE",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "calendar": {
+          "__rl": true,
+          "value": "chaitaliprabhu002@gmail.com",
+          "mode": "list",
+          "cachedResultName": "chaitaliprabhu002@gmail.com"
+        },
+        "eventId": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('event_id', 'Id of the event to delete') }}",
+        "options": {
+          "sendUpdates": "all"
+        }
+      },
+      "id": "dd4ee414-0f59-44d5-99cc-0c93a4021288",
+      "name": "delete_event",
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        160,
+        1120
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "bXYFtEd3YxfARXLE",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Communications & records specialist. Send it the meeting summary data plus the results of the Jira and Calendar agents. It emails the summary to participants and archives the notes in a new Google Doc, returning the doc id.",
+        "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('instructions', 'Meeting summary content and results from other agents to include') }}",
+        "options": {
+          "systemMessage": "You are the Gmail & Docs Agent. Tools: send_summary_email, create_doc, write_doc.\n1. Call send_summary_email exactly once. The summary, decisions, risks and recipients are filled in automatically. You MUST build action_items_html as a <ul> with one <li> per action item: \"<b>title</b> - <assignee> | due <deadline> | <priority> | <Jira key>\". For <assignee> use the FINAL Jira assignee reported by jira_agent; when jira_agent reassigned an item to the Reporter (originally Unassigned or unmatched), show \"<reporter name> (Reporter)\". Use extra_note_html only to append a short <h3>Tracking</h3> list of Jira issue keys and calendar events you were given (or empty string).\n2. Call create_doc once, then call write_doc with the returned document id and well-structured plain-text notes (SUMMARY, KEY TOPICS, ACTION ITEMS (with the same final assignees, incl. \"(Reporter)\"), DECISIONS, RISKS & BLOCKERS, FOLLOW-UP, PARKING LOT, TRACKING).\nIf a step fails, retry once, then continue with the other step and report the error. Finish with a short report including the doc id.",
+          "maxIterations": 10
+        }
+      },
+      "id": "30d540fd-7902-4e43-9697-1d0b1632497b",
+      "name": "gmail_docs_agent",
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 3,
+      "position": [
+        48,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5",
+          "cachedResultName": "gpt-5"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "b80b561a-77c2-48b9-96a8-391606b955c6",
+      "name": "Gmail Docs Agent Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -48,
+        656
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "TbbxlugiReUs6ryd",
+          "name": "OpenAI account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Assemble Structured Output').item.json.participant_emails }}",
+        "subject": "=Meeting Summary: {{ $('Assemble Structured Output').item.json.meeting_title }}",
+        "message": "={{ $('Assemble Structured Output').item.json.email_top }}<h3>Action Items</h3>{{ $fromAI('action_items_html', 'HTML <ul> list of action items, one <li> per item: <b>title</b> - FINAL Jira assignee (append (Reporter) if reassigned to the reporter) | due <deadline> | <priority> | <Jira key>', 'string') }}{{ $('Assemble Structured Output').item.json.email_bottom }}{{ $fromAI('extra_note_html', 'Optional extra HTML appended to the summary, e.g. Jira keys and calendar events created. Empty string if none.', 'string') }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "d63ed9e0-40d1-4fd8-923b-b8a98b9ff6ad",
+      "name": "send_summary_email",
+      "type": "n8n-nodes-base.gmailTool",
+      "typeVersion": 2.2,
+      "position": [
+        128,
+        640
+      ],
+      "webhookId": "087e7c59-6388-4acf-8adb-c9f4fcc72537",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "8VrJxmjWV5TparK8",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "folderId": "1uKsA3dxjSL71rLg5aSVov8YJL76hbaiz",
+        "title": "={{ $('Assemble Structured Output').item.json.meeting_title }} - {{ $now.toFormat(\"yyyy-LL-dd\") }}"
+      },
+      "id": "1b1b478f-fd42-45fa-8118-ede4fb2bb832",
+      "name": "create_doc",
+      "type": "n8n-nodes-base.googleDocsTool",
+      "typeVersion": 2,
+      "position": [
+        304,
+        624
+      ],
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "pu4LmeZW8ijc1FQj",
+          "name": "Google Docs account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentURL": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('document_id', 'Id of the doc returned by create_doc') }}",
+        "actionsUi": {
+          "actionFields": [
+            {
+              "action": "insert",
+              "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('notes_text', 'Plain-text meeting notes: summary, key topics, action items, decisions, risks, follow-up, parking lot, plus Jira keys and calendar events') }}"
+            }
+          ]
+        }
+      },
+      "id": "39a1fa69-8b3d-43e3-b58c-b56531683879",
+      "name": "write_doc",
+      "type": "n8n-nodes-base.googleDocsTool",
+      "typeVersion": 2,
+      "position": [
+        448,
+        624
+      ],
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "pu4LmeZW8ijc1FQj",
+          "name": "Google Docs account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "l.chethan880@gmail.com",
+        "subject": "=Meeting automation failed: {{ $('Assemble Structured Output').item.json.meeting_title }}",
+        "message": "=<p>The Super Agent could not finish processing this meeting.</p><p><b>Error:</b> {{ $json.error && $json.error.message ? $json.error.message : JSON.stringify($json.error || $json) }}</p><p>The original summary is below so nothing is lost.</p>{{ $('Assemble Structured Output').item.json.email_html }}",
+        "options": {}
+      },
+      "id": "05e2c980-3fc3-4eb6-8e93-0e2f927be5db",
+      "name": "Notify Orchestration Failure",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        752,
+        864
+      ],
+      "webhookId": "5ccc7ea5-2d96-4eba-a70e-b903815094e3",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "8VrJxmjWV5TparK8",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.assemblyai.com/v2/upload",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "audio",
+        "options": {}
+      },
+      "id": "7e1025de-b961-4863-adc5-3a3e52dd3495",
+      "name": "Upload Audio to AssemblyAI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -4080,
+        272
+      ],
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "id": "KGBcjxiwce4YdwrV",
+          "name": "AssemblyAI API (Chaitali S)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.assemblyai.com/v2/transcript",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ audio_url: $json.upload_url, speaker_labels: true }) }}",
+        "options": {}
+      },
+      "id": "501e7d4f-3cda-49fb-b9ce-4a91c4ceff30",
+      "name": "Request Transcription",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -3856,
+        272
+      ],
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "id": "KGBcjxiwce4YdwrV",
+          "name": "AssemblyAI API (Chaitali S)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 15
+      },
+      "id": "43497e40-574b-4537-a4e6-fd23fd80418d",
+      "name": "Wait for Transcription",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -3632,
+        272
+      ],
+      "webhookId": "0dd83d49-13d6-4db7-a4e1-028385528da7"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.assemblyai.com/v2/transcript/{{ $(\"Request Transcription\").item.json.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "options": {}
+      },
+      "id": "9794f247-0890-4ff2-bc68-ab4926c27a27",
+      "name": "Get Transcript Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -3408,
+        208
+      ],
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "id": "KGBcjxiwce4YdwrV",
+          "name": "AssemblyAI API (Chaitali S)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "status-done",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "completed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7e949a2e-ca20-4a0a-a5f3-338787d49fb1",
+      "name": "Transcript Completed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -3184,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const utt = $json.utterances || [];\nconst lines = utt.map(function (u) { return \"Speaker \" + u.speaker + \": \" + u.text; });\nconst text = lines.length ? lines.join(\"\\n\") : ($json.text || \"\");\nreturn [{ json: { transcript_text: text } }];"
+      },
+      "id": "7253429d-0e44-4d26-b286-2b7d6b2ea922",
+      "name": "Build Diarized Transcript",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2960,
+        272
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Meeting Intake Form": {
+      "main": [
+        [
+          {
+            "node": "Is JSON Input?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is JSON Input?": {
+      "main": [
+        [
+          {
+            "node": "Parse JSON File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Upload Audio to AssemblyAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse JSON File": {
+      "main": [
+        [
+          {
+            "node": "Build Transcript From JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Transcript From JSON": {
+      "main": [
+        [
+          {
+            "node": "Extract Meeting Intelligence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Meeting Intelligence": {
+      "main": [
+        [
+          {
+            "node": "Assemble Structured Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble Structured Output": {
+      "main": [
+        [
+          {
+            "node": "Super Agent (Orchestrator)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Super Agent (Orchestrator)": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Notify Orchestration Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Super Agent (Orchestrator)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fallback Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Super Agent (Orchestrator)",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "jira_agent": {
+      "ai_tool": [
+        [
+          {
+            "node": "Super Agent (Orchestrator)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jira Agent Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "jira_agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "search_issues": {
+      "ai_tool": [
+        [
+          {
+            "node": "jira_agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "create_issue": {
+      "ai_tool": [
+        [
+          {
+            "node": "jira_agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update_issue": {
+      "ai_tool": [
+        [
+          {
+            "node": "jira_agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_issue": {
+      "ai_tool": [
+        [
+          {
+            "node": "jira_agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "find_jira_user": {
+      "ai_tool": [
+        [
+          {
+            "node": "jira_agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "assign_issue": {
+      "ai_tool": [
+        [
+          {
+            "node": "jira_agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_transitions": {
+      "ai_tool": [
+        [
+          {
+            "node": "jira_agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "change_status": {
+      "ai_tool": [
+        [
+          {
+            "node": "jira_agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "add_comment": {
+      "ai_tool": [
+        [
+          {
+            "node": "jira_agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "calendar_agent": {
+      "ai_tool": [
+        [
+          {
+            "node": "Super Agent (Orchestrator)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calendar Agent Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "calendar_agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "find_events": {
+      "ai_tool": [
+        [
+          {
+            "node": "calendar_agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "create_reminder": {
+      "ai_tool": [
+        [
+          {
+            "node": "calendar_agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "create_meeting": {
+      "ai_tool": [
+        [
+          {
+            "node": "calendar_agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update_event": {
+      "ai_tool": [
+        [
+          {
+            "node": "calendar_agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "delete_event": {
+      "ai_tool": [
+        [
+          {
+            "node": "calendar_agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "gmail_docs_agent": {
+      "ai_tool": [
+        [
+          {
+            "node": "Super Agent (Orchestrator)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail Docs Agent Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "gmail_docs_agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "send_summary_email": {
+      "ai_tool": [
+        [
+          {
+            "node": "gmail_docs_agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "create_doc": {
+      "ai_tool": [
+        [
+          {
+            "node": "gmail_docs_agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "write_doc": {
+      "ai_tool": [
+        [
+          {
+            "node": "gmail_docs_agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Audio to AssemblyAI": {
+      "main": [
+        [
+          {
+            "node": "Request Transcription",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request Transcription": {
+      "main": [
+        [
+          {
+            "node": "Wait for Transcription",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Transcription": {
+      "main": [
+        [
+          {
+            "node": "Get Transcript Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Transcript Status": {
+      "main": [
+        [
+          {
+            "node": "Transcript Completed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcript Completed?": {
+      "main": [
+        [
+          {
+            "node": "Build Diarized Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait for Transcription",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Diarized Transcript": {
+      "main": [
+        [
+          {
+            "node": "Extract Meeting Intelligence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "58dae349-b1a9-43aa-9e10-bf4b84ee0df8",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d5e73412b8eba197e723c417b11372cbfbab1878dc03637d8ddb89e5a239f6d9"
+  },
+  "nodeGroups": [
+    {
+      "id": "d25928c6-324a-4881-9fbc-1fc0f8014dbb",
+      "name": "Route Input",
+      "nodeIds": [
+        "04071c99-4800-47c3-9523-d723b1cea47a"
+      ],
+      "description": "Routes uploaded file: .json transcripts skip transcription; audio goes to AssemblyAI."
+    },
+    {
+      "id": "b5aebd84-2a04-4107-8ff5-1d032ed52a4a",
+      "name": "Parse JSON Transcript",
+      "nodeIds": [
+        "7b957969-a65a-447f-9732-cbd2770ec476",
+        "88b55178-051a-4930-bfdf-b985ec53bf12"
+      ],
+      "description": "Parses an uploaded .json payload and builds the transcript text for AI extraction."
+    },
+    {
+      "id": "066d9d45-32e4-4a08-8672-ae86270eea6f",
+      "name": "Transcribe",
+      "nodeIds": [
+        "7e1025de-b961-4863-adc5-3a3e52dd3495",
+        "501e7d4f-3cda-49fb-b9ce-4a91c4ceff30",
+        "43497e40-574b-4537-a4e6-fd23fd80418d",
+        "9794f247-0890-4ff2-bc68-ab4926c27a27",
+        "7e949a2e-ca20-4a0a-a5f3-338787d49fb1",
+        "7253429d-0e44-4d26-b286-2b7d6b2ea922"
+      ],
+      "description": "AssemblyAI transcribes the audio with speaker diarization; the flow polls until done."
+    },
+    {
+      "id": "91401191-f281-4aa3-a4a3-af98f08fb9a8",
+      "name": "Extract",
+      "nodeIds": [
+        "71cb875f-0a21-4984-a53a-fb5bcb4c7816",
+        "a029a627-3bc3-4e3b-91b2-24aac001ca26"
+      ],
+      "description": "OpenAI extracts summary, decisions, action items, risks, follow-ups and parking lot as structured JSON."
+    },
+    {
+      "id": "910c65a6-82ae-4730-ac13-0d9fe72c7aef",
+      "name": "Orchestrate follow-up",
+      "nodeIds": [
+        "62006563-88ff-422a-baa9-ea62767f91b5",
+        "faa0303f-4bc6-4fa6-b4fe-e25a2782dbac",
+        "eebe52e9-657d-4006-bd7f-adc5478e4fbe",
+        "61117598-f1a7-44b4-89e5-48d006c2aede",
+        "186da68e-8452-4a3f-8ab0-f3e551a0b538",
+        "45549b9c-caf1-4d9b-ba5c-9817b3e45de2",
+        "f45e6d8b-8ae1-4eb1-a10c-154eaed4e74f",
+        "ad75a2a5-5d90-4f5b-9837-729b8da13496",
+        "a0fd490f-2a60-47a8-9d5d-e67a829e3a3a",
+        "626cc850-0df6-453b-92d9-e5f2b5c69af2",
+        "d76aee5d-aad0-40d9-9cd7-38828eb8dee0",
+        "8132ab8c-bd21-4cbe-aa9b-7a39a1dc9127",
+        "535a4ebc-6ae9-43e9-b70b-434a771df43a",
+        "461cfc91-2659-4ec1-82f8-d9a413e537b7",
+        "1fe5de1f-5bdb-4169-8879-8424e3e6968b",
+        "e5766819-2a9f-4eb3-846c-bc661d946f53",
+        "bdbf81c6-2f9f-4ec5-a065-55b7f13c81f1",
+        "15e1cc30-1a29-4e49-861a-4e6c485c5616",
+        "3629ec62-55f7-4556-84a7-95ddaeeb6489",
+        "c3ed9c7c-b9fd-4e0c-b676-8fdebb8a1d76",
+        "dd4ee414-0f59-44d5-99cc-0c93a4021288",
+        "30d540fd-7902-4e43-9697-1d0b1632497b",
+        "b80b561a-77c2-48b9-96a8-391606b955c6",
+        "d63ed9e0-40d1-4fd8-923b-b8a98b9ff6ad",
+        "1b1b478f-fd42-45fa-8118-ede4fb2bb832",
+        "39a1fa69-8b3d-43e3-b58c-b56531683879",
+        "05e2c980-3fc3-4eb6-8e93-0e2f927be5db"
+      ],
+      "description": "A super agent delegates to Jira, Calendar and Gmail & Docs child agents, retries failures and alerts an admin if it fails."
+    }
+  ],
+  "id": "JLY03UrZ2YPCwD2w",
+  "tags": []
+}
